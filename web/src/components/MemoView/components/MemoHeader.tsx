@@ -1,8 +1,9 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { BookmarkIcon } from "lucide-react";
+import { BookmarkIcon, Target } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import i18n from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Visibility } from "@/types/proto/api/v1/memo_service_pb";
@@ -19,9 +20,15 @@ import type { MemoHeaderProps } from "../types";
 const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, showPinned, onEdit, onGotoDetail, onUnpin }) => {
   const t = useTranslate();
   const [reactionSelectorOpen, setReactionSelectorOpen] = useState(false);
-
   const { memo, creator, currentUser, isArchived, readonly } = useMemoViewContext();
   const { relativeTimeFormat } = useMemoViewDerived();
+
+  const handleFocusModeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Monkey patch the memo object in memory
+    (memo as any)._triggerFocus = true;
+    onEdit();
+  };
 
   const displayTime = isArchived ? (
     (memo.displayTime ? timestampDate(memo.displayTime) : undefined)?.toLocaleString(i18n.language)
@@ -78,6 +85,18 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, sh
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        )}
+
+        {!readonly && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={handleFocusModeClick}
+            title="Edit in Focus Mode"
+          >
+            <Target className="w-4 h-4" />
+          </Button>
         )}
 
         <MemoActionMenu memo={memo} readonly={readonly} onEdit={onEdit} />

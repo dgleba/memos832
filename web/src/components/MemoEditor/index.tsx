@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
@@ -41,16 +41,21 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
   const { userGeneralSetting } = useAuth();
 
   const memoName = memo?.name;
-
-  // Get default visibility from user settings
   const defaultVisibility = userGeneralSetting?.memoVisibility ? convertVisibilityFromString(userGeneralSetting.memoVisibility) : undefined;
 
+  // Automation Patch: Watch for the memory flag on the memo object
+  useEffect(() => {
+    if (memo && (memo as any)._triggerFocus) {
+      if (!state.ui.isFocusMode) {
+        dispatch(actions.toggleFocusMode());
+      }
+      // Remove flag so it doesn't re-trigger
+      delete (memo as any)._triggerFocus;
+    }
+  }, [memo, state.ui.isFocusMode, dispatch, actions]);
+
   useMemoInit({ editorRef, memo, cacheKey, username: currentUser?.name ?? "", autoFocus, defaultVisibility });
-
-  // Auto-save content to localStorage
   useAutoSave(state.content, currentUser?.name ?? "", cacheKey);
-
-  // Focus mode management with body scroll lock
   useFocusMode(state.ui.isFocusMode);
 
   const handleToggleFocusMode = () => {
@@ -60,7 +65,6 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
   useKeyboard(editorRef, { onSave: handleSave });
 
   async function handleSave() {
-    // Validate before saving
     const { valid, reason } = validationService.canSave(state);
     if (!valid) {
       toast.error(reason || "Cannot save");
@@ -68,44 +72,29 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
     }
 
     dispatch(actions.setLoading("saving", true));
-
     try {
       const result = await memoService.save(state, { memoName, parentMemoName });
-
       if (!result.hasChanges) {
         toast.error(t("editor.no-changes-detected"));
         onCancel?.();
         return;
       }
-
-      // Clear localStorage cache on successful save
       cacheService.clear(cacheService.key(currentUser?.name ?? "", cacheKey));
-
-      // Invalidate React Query cache to refresh memo lists across the app
       const invalidationPromises = [
         queryClient.invalidateQueries({ queryKey: memoKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: userKeys.stats() }),
       ];
-
-      // Ensure memo detail pages don't keep stale cached content after edits.
       if (memoName) {
         invalidationPromises.push(queryClient.invalidateQueries({ queryKey: memoKeys.detail(memoName) }));
       }
-
-      // If this was a comment, also invalidate the comments query for the parent memo
       if (parentMemoName) {
         invalidationPromises.push(queryClient.invalidateQueries({ queryKey: memoKeys.comments(parentMemoName) }));
       }
-
       await Promise.all(invalidationPromises);
-
-      // Reset editor state to initial values
       dispatch(actions.reset());
       if (!memoName && defaultVisibility) {
         dispatch(actions.setMetadata({ visibility: defaultVisibility }));
       }
-
-      // Notify parent component of successful save
       onConfirm?.(result.memoName);
     } catch (error) {
       handleError(error, toast.error, {
@@ -120,13 +109,6 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
   return (
     <>
       <FocusModeOverlay isActive={state.ui.isFocusMode} onToggle={handleToggleFocusMode} />
-
-      {/*
-        Layout structure:
-        - Uses justify-between to push content to top and bottom
-        - In focus mode: becomes fixed with specific spacing, editor grows to fill space
-        - In normal mode: stays relative with max-height constraint
-      */}
       <div
         className={cn(
           "group relative w-full flex flex-col justify-between items-start bg-card px-4 pt-3 pb-1 rounded-lg border border-border gap-2",
@@ -135,19 +117,13 @@ const MemoEditorImpl: React.FC<MemoEditorProps> = ({
           className,
         )}
       >
-        {/* Exit button is absolutely positioned in top-right corner when active */}
         <FocusModeExitButton isActive={state.ui.isFocusMode} onToggle={handleToggleFocusMode} title={t("editor.exit-focus-mode")} />
-
         {memoName && (
           <div className="w-full -mb-1">
             <TimestampPopover />
           </div>
         )}
-
-        {/* Editor content grows to fill available space in focus mode */}
         <EditorContent ref={editorRef} placeholder={placeholder} autoFocus={autoFocus} />
-
-        {/* Metadata and toolbar grouped together at bottom */}
         <div className="w-full flex flex-col gap-2">
           <EditorMetadata memoName={memoName} />
           <EditorToolbar onSave={handleSave} onCancel={onCancel} memoName={memoName} />
