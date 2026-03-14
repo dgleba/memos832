@@ -1,9 +1,15 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { BookmarkIcon } from "lucide-react";
+
+// import { useState } from "react";
+import { Button } from "@/components/ui/button";
+
+import { BookmarkIcon, Target } from "lucide-react";
+
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import useNavigateTo from "@/hooks/useNavigateTo";
+
 import i18n from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Visibility } from "@/types/proto/api/v1/memo_service_pb";
@@ -24,6 +30,20 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, sh
 
   const { memo, creator, currentUser, parentPage, isArchived, readonly, openEditor } = useMemoViewContext();
   const { relativeTimeFormat } = useMemoViewDerived();
+  
+  // # David Gleba 2026-04-25_Sat_17.09-PM 
+  /* const handleFocusModeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Monkey patch the memo object in memory
+    (memo as any)._triggerFocus = true;
+    onEdit();
+  }; */
+
+	const handleFocusModeClick = (e: React.MouseEvent) => {
+	  e.stopPropagation();
+	  (memo as any)._triggerFocus = true;
+	  openEditor(); // <--- FIXED: Use openEditor from context
+	};
 
   const navigateTo = useNavigateTo();
   const handleGotoMemoDetailPage = useCallback(() => {
@@ -31,6 +51,7 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, sh
   }, [memo.name, parentPage, navigateTo]);
 
   const { unpinMemo } = useMemoActions(memo);
+
 
   const displayTime = isArchived ? (
     (memo.displayTime ? timestampDate(memo.displayTime) : undefined)?.toLocaleString(i18n.language)
@@ -89,19 +110,44 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, sh
           </TooltipProvider>
         )}
 
+		
+        {!readonly && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={handleFocusModeClick}
+            title="Edit in Focus Mode"
+          >
+            <Target className="w-4 h-4" />
+          </Button>
+        )}
+
+        
+
         <MemoActionMenu memo={memo} readonly={readonly} onEdit={openEditor} />
+
+
       </div>
     </div>
   );
 };
 
+
+
 interface CreatorDisplayProps {
-  creator: User;
-  displayTime: React.ReactNode;
+  creator: any; // Ideally use the User type here
+  displayTime: string;
   onGotoDetail: () => void;
+  onEdit?: () => void; // 1. Added to Interface
 }
 
-const CreatorDisplay: React.FC<CreatorDisplayProps> = ({ creator, displayTime, onGotoDetail }) => (
+const CreatorDisplay: React.FC<CreatorDisplayProps> = ({ 
+  creator, 
+  displayTime, 
+  onGotoDetail, 
+  onEdit // 2. Added to Destructuring
+}) => (
   <div className="w-full flex flex-row justify-start items-center">
     <Link className="w-auto hover:opacity-80 rounded-md transition-colors" to={`/u/${encodeURIComponent(creator.username)}`} viewTransition>
       <UserAvatar className="mr-2 shrink-0" avatarUrl={creator.avatarUrl} />
@@ -117,7 +163,10 @@ const CreatorDisplay: React.FC<CreatorDisplayProps> = ({ creator, displayTime, o
       <button
         type="button"
         className="w-auto -mt-0.5 text-xs leading-tight text-muted-foreground select-none cursor-pointer hover:opacity-80 transition-colors text-left"
-        onClick={onGotoDetail}
+        onClick={() => {
+          if (onEdit) onEdit(); // Use it here if needed
+          onGotoDetail();
+        }}
       >
         {displayTime}
       </button>
@@ -128,16 +177,25 @@ const CreatorDisplay: React.FC<CreatorDisplayProps> = ({ creator, displayTime, o
 interface TimeDisplayProps {
   displayTime: React.ReactNode;
   onGotoDetail: () => void;
+  onEdit?: () => void; // 3. Added to Interface
 }
 
-const TimeDisplay: React.FC<TimeDisplayProps> = ({ displayTime, onGotoDetail }) => (
+const TimeDisplay: React.FC<TimeDisplayProps> = ({ 
+  displayTime, 
+  onGotoDetail, 
+  onEdit // 4. Added to Destructuring
+}) => (
   <button
     type="button"
     className="w-full text-sm leading-tight text-muted-foreground select-none cursor-pointer hover:text-foreground transition-colors text-left"
-    onClick={onGotoDetail}
+    onClick={() => {
+      if (onEdit) onEdit(); // 5. Now 'onEdit' is defined and can be called safely
+      onGotoDetail();
+    }}
   >
     {displayTime}
   </button>
 );
+
 
 export default MemoHeader;
